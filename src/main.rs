@@ -1,21 +1,13 @@
-use js_ast::{JsToken, JsTokenKeyword, JsTokenPunctuation, JsTokenLiteral};
+use js_ast::{JsAbstractor, JsToken, JsTokenizer};
 
 const FILE_CONTENT: &'static str = include_str!("./test.js");
 
 fn main() {
-    let ast = js_ast::JsTokenizer::new_from_text(Box::from(FILE_CONTENT));
+    let tokenizer = JsTokenizer::new_from_text(Box::from(FILE_CONTENT));
+    let tokens = tokenizer.collect::<Vec<JsToken>>();
+    let ast = JsAbstractor::new_from_tokens(tokens.into());
+
     for token in ast {
-        // println!("{token:?}");
-        match token {
-            JsToken::Keyword(JsTokenKeyword::Const, _) => print!("const "),
-            JsToken::Punctuation(JsTokenPunctuation::LeftParen, _) => print!("("),
-            JsToken::Punctuation(JsTokenPunctuation::RightParen, _) => print!(")"),
-            JsToken::Punctuation(JsTokenPunctuation::Dot, _) => print!("."),
-            JsToken::Punctuation(JsTokenPunctuation::Equal, _) => print!(" = "),
-            JsToken::Punctuation(JsTokenPunctuation::Semicolon, _) => print!(";\n"),
-            JsToken::Punctuation(JsTokenPunctuation::Plus, _) => print!(" + "),
-            JsToken::Literal(JsTokenLiteral::Number(n), _) => print!("{n}"),
-            JsToken::Variable(var, _) => print!("{var}"),
-        }
+        println!("{token:#?}");
     }
 }
