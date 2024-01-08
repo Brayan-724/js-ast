@@ -1,4 +1,13 @@
-const a = 1;
-const b = 2;
-console.log(a + b);
-console.log(a + b + b + b);
+let word = "Buenos Aires";
+let left = 0;
+let right = word.length - 1;
+
+while (left < right) {
+    if (word[left] !== word[right]) {
+      console.log("false");
+    }
+    left = left + 1;
+    right = right - 1;
+}
+
+console.log("true")

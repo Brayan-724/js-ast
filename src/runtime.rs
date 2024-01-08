@@ -3,7 +3,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{JsNode, JsNodeExpression, JsNodeExpressionBinary, JsToken, JsTokenLiteral};
+use crate::{
+    JsNode, JsNodeExpression, JsNodeExpressionBinary, JsNodeStatement, JsToken, JsTokenLiteral,
+};
 
 type Fp = Arc<Box<dyn Fn(Vec<Arc<Mutex<JsValue>>>) -> Arc<Mutex<JsValue>> + Send + Sync>>;
 
@@ -33,6 +35,7 @@ pub enum JsValue {
     Undefined,
     Number(f64),
     String(String),
+    Boolean(bool),
     Object(HashMap<Box<str>, Arc<Mutex<JsValue>>>),
     Function(JsValueFunction),
 }
@@ -40,6 +43,7 @@ pub enum JsValue {
 impl From<&JsTokenLiteral> for JsValue {
     fn from(value: &JsTokenLiteral) -> Self {
         match value {
+            JsTokenLiteral::Boolean(b) => JsValue::Boolean(*b),
             JsTokenLiteral::Number(n) => JsValue::Number(*n),
             JsTokenLiteral::String(s) => JsValue::String(s.clone()),
         }
@@ -47,6 +51,23 @@ impl From<&JsTokenLiteral> for JsValue {
 }
 
 impl JsValue {
+    pub fn is_truthy(&self) -> bool {
+        match self {
+            JsValue::Undefined => false,
+            JsValue::Boolean(b) => *b,
+            JsValue::Number(n) => *n != 0.0,
+            JsValue::String(s) => !s.is_empty(),
+            JsValue::Object(o) => !o.is_empty(),
+            JsValue::Function(..) => true,
+        }
+    }
+
+    pub fn as_number(&self) -> Option<&f64> {
+        match self {
+            JsValue::Number(s) => Some(s),
+            _ => None,
+        }
+    }
     pub fn as_string(&self) -> Option<&String> {
         match self {
             JsValue::String(s) => Some(s),
@@ -63,6 +84,20 @@ impl JsValue {
         match self {
             JsValue::Function(f) => Some(f),
             _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for JsValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JsValue::Undefined => f.write_str("undefined"),
+            JsValue::Boolean(true) => f.write_str("true"),
+            JsValue::Boolean(false) => f.write_str("false"),
+            JsValue::Number(n) => f.write_fmt(format_args!("{n}")),
+            JsValue::String(s) => f.write_str(s),
+            JsValue::Object(..) => f.write_str("[object Object]"),
+            JsValue::Function(..) => f.write_str("function () { [native code] }"),
         }
     }
 }
@@ -108,11 +143,44 @@ impl JsRuntime {
     }
 
     pub fn binary_op(kind: &JsNodeExpressionBinary, left: &JsValue, right: &JsValue) -> JsValue {
+        use JsNodeExpressionBinary::*;
+        use JsValue::*;
+
         match kind {
-            JsNodeExpressionBinary::Add => match (left, right) {
-                (JsValue::Undefined, JsValue::Undefined) => JsValue::Undefined,
-                (JsValue::Number(l), JsValue::Number(r)) => JsValue::Number(l + r),
+            Add => match (left, right) {
+                (Undefined, Undefined) => Undefined,
+                (Number(l), Number(r)) => Number(l + r),
                 _ => todo!(),
+            },
+            Divide => match (left, right) {
+                (Undefined, Undefined) => Undefined,
+                (Number(l), Number(r)) => Number(l / r),
+                _ => todo!(),
+            },
+            Mult => match (left, right) {
+                (Undefined, Undefined) => Undefined,
+                (Number(l), Number(r)) => Number(l * r),
+                _ => todo!(),
+            },
+            Sub => match (left, right) {
+                (Undefined, Undefined) => Undefined,
+                (Number(l), Number(r)) => Number(l - r),
+                _ => todo!(),
+            },
+
+            LessThan => match (left, right) {
+                (Undefined, Undefined) => Boolean(false),
+                (Number(l), Number(r)) => Boolean(l < r),
+                _ => todo!(),
+            },
+
+            NotStrictlyEqual => match (left, right) {
+                (Undefined, Undefined) => Boolean(true),
+                (Undefined, _) => Boolean(false),
+                (_, Undefined) => Boolean(false),
+                (Number(l), Number(r)) => Boolean(l != r),
+                (String(l), String(r)) => Boolean(l != r),
+                (l, r) => todo!("{l:?} !== {r:?}"),
             },
         }
     }
@@ -144,13 +212,28 @@ impl JsRuntime {
                     .cloned()
                     .unwrap_or(Arc::new(Mutex::new(JsValue::Undefined)))
             }
-            JsNodeExpression::Assigment { .. } => todo!(),
+            JsNodeExpression::Assigment { variable, value } => {
+                let JsToken::Variable(name, ..) = variable else {
+                    unreachable!();
+                };
+
+                let value = self.process_node_expression(value);
+
+                self.context
+                    .lock()
+                    .unwrap()
+                    .variables
+                    .insert(name.clone(), value.clone());
+
+                value
+            }
             JsNodeExpression::Member { from, member } => {
                 let from = self.process_node_expression(from);
                 let from = from.lock().unwrap();
 
+                let member = self.process_node_expression(member);
+
                 if let Some(o) = from.as_object() {
-                    let member = self.process_node_expression(member);
                     let member = member.lock().unwrap();
                     o.get(&Box::from(
                         member
@@ -160,8 +243,31 @@ impl JsRuntime {
                     ))
                     .cloned()
                     .unwrap_or(Arc::new(Mutex::new(JsValue::Undefined)))
+                } else if let Some(s) = from.as_string() {
+                    let member = member.lock().unwrap();
+                    if let Some(member) = member.as_string() {
+                        match member.as_str() {
+                            "length" => Arc::new(Mutex::new(JsValue::Number(s.len() as f64))),
+                            _ => Arc::new(Mutex::new(JsValue::Undefined)),
+                        }
+                    } else if let Some(n) = member.as_number() {
+                        if n <= &0.0 {
+                            Arc::new(Mutex::new(JsValue::Undefined))
+                        } else {
+                            let idx = n.abs().round() as usize;
+                            let c = s
+                                .chars()
+                                .nth(idx)
+                                .map(|c| JsValue::String(c.to_string()))
+                                .unwrap_or(JsValue::Undefined);
+
+                            Arc::new(Mutex::new(c))
+                        }
+                    } else {
+                        Arc::new(Mutex::new(JsValue::Undefined))
+                    }
                 } else {
-                    panic!("Cannot access to a member of a non-object variable")
+                    panic!("Cannot access to a member of a non-object variable: {from:#?}")
                 }
             }
             JsNodeExpression::FunctionCall { call, arguments } => {
@@ -207,8 +313,42 @@ impl JsRuntime {
                 Arc::new(Mutex::new(JsValue::Undefined))
             }
             JsNode::Expression { expression, .. } => self.process_node_expression(expression),
-            JsNode::Block { .. } => todo!(),
+            JsNode::Block { children, .. } => {
+                for node in children.iter() {
+                    self.process_node(node);
+                }
+
+                Arc::new(Mutex::new(JsValue::Undefined))
+            }
             JsNode::Program { .. } => unreachable!("Program inside a program"),
+            JsNode::Statement { statement, .. } => match statement {
+                JsNodeStatement::If {
+                    condition,
+                    inner,
+                    otherwise,
+                } => {
+                    let condition = self.process_node_expression(condition);
+                    if condition.lock().unwrap().is_truthy() {
+                        self.process_node(inner);
+                    } else if otherwise.is_some() {
+                        self.process_node(&Option::as_ref(otherwise).unwrap());
+                    }
+
+                    Arc::new(Mutex::new(JsValue::Undefined))
+                }
+                JsNodeStatement::While { condition, inner } => {
+                    loop {
+                        let condition = self.process_node_expression(condition);
+                        if condition.lock().unwrap().is_truthy() {
+                            self.process_node(inner);
+                        } else {
+                            break;
+                        }
+                    }
+
+                    Arc::new(Mutex::new(JsValue::Undefined))
+                }
+            },
         }
     }
 

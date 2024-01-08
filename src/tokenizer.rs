@@ -3,6 +3,9 @@ pub enum JsTokenKeyword {
     Const,
     // Let,
     // Function,
+    If,
+    Else,
+    While,
 }
 
 impl TryFrom<&str> for JsTokenKeyword {
@@ -10,7 +13,10 @@ impl TryFrom<&str> for JsTokenKeyword {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "const" => Ok(Self::Const),
+            "let" => Ok(Self::Const),
+            "if" => Ok(Self::If),
+            "else" => Ok(Self::Else),
+            "while" => Ok(Self::While),
             _ => Err(()),
         }
     }
@@ -18,20 +24,23 @@ impl TryFrom<&str> for JsTokenKeyword {
 
 #[derive(Debug, Clone)]
 pub enum JsTokenPunctuation {
-    LeftParen,  // (
-    RightParen, // )
-    // LeftBrace,     // {
-    // RightBrace,    // }
-    Coma,      // ,
-    Semicolon, // ;
-    Dot,       // .
-    Equal,     // =
-    // EqualEqual,    // ==
     // MoreThan,      // >
-    // MoreThanEqual, // >=
-    // LessThan,      // <
-    // LessThanEqual, // <=
-    Plus, // +
+    LeftParen,    // (
+    RightParen,   // )
+    LeftBrace,    // {
+    RightBrace,   // }
+    LeftBracket,  // [
+    RightBracket, // ]
+    Coma,         // ,
+    Semicolon,    // ;
+    Dot,          // .
+    Equal,        // =
+    Bang,         // !
+    LessThan,     // <
+    Plus,         // +
+    Star,         // *
+    Slash,        // /
+    Hyphen,       // -
 }
 
 impl TryFrom<&str> for JsTokenPunctuation {
@@ -41,11 +50,20 @@ impl TryFrom<&str> for JsTokenPunctuation {
         match value {
             "(" => Ok(Self::LeftParen),
             ")" => Ok(Self::RightParen),
+            "{" => Ok(Self::LeftBrace),
+            "}" => Ok(Self::RightBrace),
+            "[" => Ok(Self::LeftBracket),
+            "]" => Ok(Self::RightBracket),
             "," => Ok(Self::Coma),
             ";" => Ok(Self::Semicolon),
             "." => Ok(Self::Dot),
+            "<" => Ok(Self::LessThan),
             "=" => Ok(Self::Equal),
+            "!" => Ok(Self::Bang),
             "+" => Ok(Self::Plus),
+            "*" => Ok(Self::Star),
+            "/" => Ok(Self::Slash),
+            "-" => Ok(Self::Hyphen),
             _ => Err(()),
         }
     }
@@ -55,6 +73,7 @@ impl TryFrom<&str> for JsTokenPunctuation {
 pub enum JsTokenLiteral {
     Number(f64), // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number#number_encoding
     String(String),
+    Boolean(bool),
 }
 
 impl JsTokenLiteral {
@@ -88,7 +107,11 @@ impl TryFrom<&str> for JsTokenLiteral {
     type Error = ();
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if JsTokenLiteral::is_number(value) {
+        if value == "true" {
+            Ok(JsTokenLiteral::Boolean(true))
+        } else if value == "false" {
+            Ok(JsTokenLiteral::Boolean(false))
+        } else if JsTokenLiteral::is_number(value) {
             // is_number validate to f64
             Ok(JsTokenLiteral::Number(value.parse().unwrap()))
         } else {
@@ -137,6 +160,8 @@ pub struct JsTokenizer {
     source_code: Box<str>,
     chars: Box<[char]>,
     buffering_started: bool,
+    /// String backslash for escape
+    has_slash: bool,
     last_pointer: usize,
     pointer: usize,
 
@@ -152,6 +177,8 @@ impl JsTokenizer {
             source_code,
             chars,
             buffering_started: false,
+            has_slash: false,
+
             last_pointer: 0,
             pointer: 0,
 
@@ -201,7 +228,24 @@ impl JsTokenizer {
             '0'..='9' => {
                 self.move_pointer(1);
             }
-            _ => {
+            '\\' if self.buffering_started => {
+                self.has_slash = !self.has_slash;
+                self.move_pointer(1);
+            }
+            '"' if self.buffering_started && !self.has_slash => {
+                let string: String = self.chars[self.last_pointer..self.pointer]
+                    .into_iter()
+                    .collect();
+                let token = JsToken::Literal(JsTokenLiteral::String(string), self.get_meta());
+
+                self.buffering_started = false;
+                self.has_slash = false;
+                self.last_pointer = self.pointer;
+                self.move_pointer(1);
+
+                return Some(token);
+            }
+            _ if !self.buffering_started => {
                 if curr_char == '\n' {
                     let token = Some(JsToken::Punctuation(
                         JsTokenPunctuation::Semicolon,
@@ -225,7 +269,14 @@ impl JsTokenizer {
                         0
                     };
 
+                if curr_char == '"' {
+                    self.buffering_started = true;
+                }
+
                 return token;
+            }
+            _ => {
+                self.move_pointer(1);
             }
         }
         None
@@ -253,6 +304,10 @@ impl JsTokenizer {
         let token = token.trim();
 
         if token.is_empty() {
+            return None;
+        }
+
+        if token == "\"" {
             return None;
         }
 
