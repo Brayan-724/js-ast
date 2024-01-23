@@ -1,10 +1,13 @@
-// #[derive(Debug, Clone)]
-// pub enum JsAstNode {
-//     Block(Box<[JsNode]>),
-//     VariableDeclaration(JsToken, JsNode)
-// }
+use crate::tokenizer::{JsToken, JsTokenKeyword, JsTokenLiteral, JsTokenPunctuation};
 
-use crate::{JsToken, JsTokenKeyword, JsTokenLiteral, JsTokenPunctuation};
+mod node;
+pub use node::*;
+
+mod statement;
+pub use statement::*;
+
+mod expression;
+pub use expression::*;
 
 macro_rules! otherwise_error {
     ($carrier:ident, $fn:expr) => {
@@ -16,98 +19,6 @@ macro_rules! otherwise_error {
 
 #[derive(Debug, Clone)]
 pub struct JsNodeMeta {}
-
-#[derive(Debug, Clone)]
-pub enum JsNodeExpressionBinary {
-    Add,
-    Divide,
-    Mult,
-    Sub,
-
-    // Conditionals
-    NotStrictlyEqual,
-    LessThan,
-}
-
-#[derive(Debug, Clone)]
-pub enum JsNodeExpression {
-    Raw {
-        children: Box<[JsToken]>,
-    },
-    FunctionCall {
-        call: Box<JsNodeExpression>,
-        arguments: Box<[JsNodeExpression]>,
-    },
-    Assigment {
-        variable: JsToken,
-        value: Box<JsNodeExpression>,
-    },
-    BinaryOp {
-        kind: JsNodeExpressionBinary,
-        left: Box<JsNodeExpression>,
-        right: Box<JsNodeExpression>,
-    },
-    Variable {
-        name: JsToken,
-    },
-    Member {
-        from: Box<JsNodeExpression>,
-        member: Box<JsNodeExpression>,
-    },
-    Literal {
-        value: JsTokenLiteral,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub enum JsNodeStatement {
-    If {
-        condition: Box<JsNodeExpression>,
-        inner: Box<JsNode>,
-        otherwise: Box<Option<JsNode>>,
-    },
-    While {
-        condition: Box<JsNodeExpression>,
-        inner: Box<JsNode>,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub enum JsNode {
-    Program {
-        child: Box<[JsNode]>,
-        meta: JsNodeMeta,
-    },
-    Block {
-        children: Box<[JsNode]>,
-        meta: JsNodeMeta,
-    },
-    VariableDeclaration {
-        key: JsToken,
-        value: Box<JsNode>,
-        meta: JsNodeMeta,
-    },
-    Expression {
-        expression: JsNodeExpression,
-        meta: JsNodeMeta,
-    },
-    Statement {
-        statement: JsNodeStatement,
-        meta: JsNodeMeta,
-    },
-}
-
-impl JsNode {
-    pub fn get_meta(&self) -> &JsNodeMeta {
-        match self {
-            JsNode::Program { meta, .. } => meta,
-            JsNode::Block { meta, .. } => meta,
-            JsNode::VariableDeclaration { meta, .. } => meta,
-            JsNode::Expression { meta, .. } => meta,
-            JsNode::Statement { meta, .. } => meta,
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct JsAbstractor {
@@ -480,6 +391,7 @@ impl JsAbstractor {
                 if let JsToken::Punctuation(JsTokenPunctuation::RightBrace, ..) = curr_token {
                     self.pointer += 1;
                     return Ok(JsNode::Block {
+                        label: None,
                         children: Box::from(children),
                         meta: JsNodeMeta {},
                     });

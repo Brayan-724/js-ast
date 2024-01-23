@@ -6,6 +6,7 @@ pub enum JsTokenKeyword {
     If,
     Else,
     While,
+    Break,
 }
 
 impl TryFrom<&str> for JsTokenKeyword {
@@ -17,6 +18,7 @@ impl TryFrom<&str> for JsTokenKeyword {
             "if" => Ok(Self::If),
             "else" => Ok(Self::Else),
             "while" => Ok(Self::While),
+            "break" => Ok(Self::While),
             _ => Err(()),
         }
     }

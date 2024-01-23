@@ -6,6 +6,9 @@ use std::{
 use crate::{
     JsNode, JsNodeExpression, JsNodeExpressionBinary, JsNodeStatement, JsToken, JsTokenLiteral,
 };
+pub trait JsNodeProcessable {
+    fn process(&self, context: &JsRuntime) -> Arc<Mutex<JsValue>>;
+}
 
 type Fp = Arc<Box<dyn Fn(Vec<Arc<Mutex<JsValue>>>) -> Arc<Mutex<JsValue>> + Send + Sync>>;
 
@@ -320,6 +323,7 @@ impl JsRuntime {
 
                 Arc::new(Mutex::new(JsValue::Undefined))
             }
+            JsNode::Statement { statement, .. } => statement.process(self),
             JsNode::Program { .. } => unreachable!("Program inside a program"),
             JsNode::Statement { statement, .. } => match statement {
                 JsNodeStatement::If {
