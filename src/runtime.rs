@@ -3,7 +3,13 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{JsNode, JsNodeExpression, JsNodeExpressionBinary, JsToken, JsTokenLiteral};
+use crate::{
+    JsNode, JsNodeExpression, JsNodeExpressionBinary, JsNodeStatement, JsToken, JsTokenLiteral,
+};
+
+pub trait JsNodeProcessable {
+    fn process(&self, context: &JsRuntime) -> Arc<Mutex<JsValue>>;
+}
 
 type Fp = Arc<Box<dyn Fn(Vec<Arc<Mutex<JsValue>>>) -> Arc<Mutex<JsValue>> + Send + Sync>>;
 
@@ -207,7 +213,14 @@ impl JsRuntime {
                 Arc::new(Mutex::new(JsValue::Undefined))
             }
             JsNode::Expression { expression, .. } => self.process_node_expression(expression),
-            JsNode::Block { .. } => todo!(),
+            JsNode::Block { children, .. } => {
+                for node in children.iter() {
+                    self.process_node(node);
+                }
+
+                Arc::new(Mutex::new(JsValue::Undefined))
+            }
+            JsNode::Statement { statement, .. } => statement.process(self),
             JsNode::Program { .. } => unreachable!("Program inside a program"),
         }
     }

@@ -3,6 +3,10 @@ pub enum JsTokenKeyword {
     Const,
     // Let,
     // Function,
+    If,
+    Else,
+    While,
+    Break,
 }
 
 impl TryFrom<&str> for JsTokenKeyword {
@@ -10,7 +14,11 @@ impl TryFrom<&str> for JsTokenKeyword {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "const" => Ok(Self::Const),
+            "let" => Ok(Self::Const),
+            "if" => Ok(Self::If),
+            "else" => Ok(Self::Else),
+            "while" => Ok(Self::While),
+            "break" => Ok(Self::While),
             _ => Err(()),
         }
     }
