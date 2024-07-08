@@ -524,6 +524,7 @@ impl JsAbstractor {
     pub fn process_line(&mut self) -> Result<JsNode, JsAbstractorError> {
         let mut t = Err(JsAbstractorError::None);
         otherwise_error!(t, self.var_decl());
+        otherwise_error!(t, self.block_expr());
         otherwise_error!(t, self.if_statement());
         otherwise_error!(t, self.while_statement());
         otherwise_error!(t, self.expr_decl());

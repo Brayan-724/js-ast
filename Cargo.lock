@@ -3,5 +3,14 @@
 version = 3
 
 [[package]]
+name = "amvm"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "debaed6fb14c2e1d6109d654434827dd9d143a8d80329863777df3bf5abfe519"
+
+[[package]]
 name = "js-ast"
 version = "0.1.0"
+dependencies = [
+ "amvm",
+]

@@ -18,7 +18,7 @@ impl TryFrom<&str> for JsTokenKeyword {
             "if" => Ok(Self::If),
             "else" => Ok(Self::Else),
             "while" => Ok(Self::While),
-            "break" => Ok(Self::While),
+            "break" => Ok(Self::Break),
             _ => Err(()),
         }
     }

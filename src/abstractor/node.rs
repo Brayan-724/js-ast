@@ -1,7 +1,4 @@
-use crate::{
-    abstractor::{JsNodeExpression, JsNodeMeta, JsNodeStatement, JsToken},
-    JsNodeProcessable,
-};
+use crate::abstractor::{JsNodeExpression, JsNodeMeta, JsNodeStatement, JsToken};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct JsNodeLabel(Box<str>);
@@ -43,5 +40,3 @@ impl JsNode {
         }
     }
 }
-
-impl JsNodeProcessable for JsNode {}
